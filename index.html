@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16302B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mis Gastos">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Mis Gastos</title>
+<style>
+:root{
+  --bg:#EEF1EC; --surface:#FFFFFF; --ink:#16302B; --muted:#5E6E68;
+  --line:#D5DCD6; --accent:#E8A33D; --accent-ink:#16302B; --danger:#B3413A;
+  --radius-lg:22px; --radius-md:14px;
+  --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light dark;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A17; --surface:#172521; --ink:#E6EEEA; --muted:#93A39D;
+    --line:#2A3A35; --danger:#E0756D;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A17; --surface:#172521; --ink:#E6EEEA; --muted:#93A39D;
+  --line:#2A3A35; --danger:#E0756D;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:17px;line-height:1.4;-webkit-tap-highlight-color:transparent;min-height:100%}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+.app{max-width:560px;margin:0 auto;padding:12px 16px 120px}
+
+/* Encabezado */
+.top{padding:8px 4px 20px}
+.top-row{display:flex;align-items:center;gap:4px}
+.mes{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);
+  border-radius:999px;padding:3px}
+.mes h1{margin:0;font-size:16px;font-weight:600;min-width:9.5em;text-align:center}
+.icon-btn{border:0;background:transparent;width:38px;height:38px;border-radius:999px;font-size:22px;
+  line-height:1;display:grid;place-items:center;color:var(--ink)}
+.icon-btn:active{background:var(--line)}
+.top-row .menu{margin-left:auto;background:var(--surface);border:1px solid var(--line);width:44px;height:44px}
+.total{margin:22px 0 0;font-size:clamp(44px,13vw,64px);font-weight:700;letter-spacing:-.02em;line-height:1}
+.total-sub{margin:8px 0 0;color:var(--muted);font-size:15px}
+
+/* Avisos */
+.aviso{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--accent);
+  border-radius:var(--radius-md);padding:12px 14px;margin:0 0 12px;font-size:15px}
+.aviso p{margin:0 0 10px}
+.aviso .acciones{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Categorías */
+.cats{background:var(--surface);border-radius:var(--radius-lg);padding:16px;margin-bottom:20px}
+.cats[hidden]{display:none}
+.tira{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;margin-bottom:14px}
+.tira span{display:block;min-width:4px}
+.cat-fila{display:grid;grid-template-columns:12px 1fr auto 3.2em;align-items:center;gap:10px;padding:5px 0;font-size:15px}
+.cat-fila .pct{color:var(--muted);text-align:right}
+.punto{width:12px;height:12px;border-radius:50%;display:inline-block}
+
+/* Lista */
+.dia{margin-bottom:18px}
+.dia-head{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;padding:0 6px 6px}
+.dia-head span:first-child::first-letter{text-transform:uppercase}
+.dia-items{background:var(--surface);border-radius:var(--radius-md);overflow:hidden}
+.item{display:grid;grid-template-columns:12px 1fr auto;gap:12px;align-items:center;width:100%;
+  border:0;background:transparent;text-align:left;padding:14px 16px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item:active{background:var(--bg)}
+.item .t1{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .t2{display:block;color:var(--muted);font-size:14px}
+.item .monto{font-weight:600}
+.vacio{text-align:center;color:var(--muted);padding:40px 20px}
+.vacio strong{display:block;color:var(--ink);font-size:18px;margin-bottom:6px}
+
+/* Botones */
+.btn{border:0;border-radius:999px;padding:12px 20px;font-weight:600;font-size:16px}
+.btn-primario{background:var(--accent);color:var(--accent-ink)}
+.btn-sec{background:transparent;border:1.5px solid var(--line);color:var(--ink)}
+.btn-peligro{background:transparent;color:var(--danger);border:1.5px solid currentColor}
+.btn-chico{padding:8px 14px;font-size:14px}
+.btn:active{transform:scale(.98)}
+
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:0;
+  margin-bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:16px 30px;
+  font-size:17px;font-weight:700;white-space:nowrap;box-shadow:0 8px 24px rgba(22,48,43,.28);display:flex;align-items:center;gap:10px}
+.fab::before{content:"+";font-size:24px;line-height:1;font-weight:500}
+.fab:active{transform:translateX(-50%) scale(.97)}
+
+/* Hojas inferiores */
+.velo{position:fixed;inset:0;background:rgba(10,20,17,.45);opacity:0;transition:opacity .2s}
+.velo.abierta{opacity:1}
+.hoja{position:fixed;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;background:var(--surface);
+  border-radius:24px 24px 0 0;padding:10px 20px calc(20px + env(safe-area-inset-bottom,0px));
+  transform:translateY(100%);transition:transform .25s ease;max-width:560px;margin:0 auto}
+.hoja.abierta{transform:translateY(0)}
+.hoja::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 14px}
+.hoja h2{margin:0 0 16px;font-size:20px}
+@media (prefers-reduced-motion: reduce){.hoja,.velo{transition:none}}
+
+.monto-wrap{display:flex;align-items:baseline;gap:6px;border-bottom:2px solid var(--line);padding-bottom:6px;margin-bottom:20px}
+.monto-wrap:focus-within{border-color:var(--accent)}
+.monto-wrap span{font-size:32px;font-weight:600;color:var(--muted)}
+.monto-wrap input{border:0;background:transparent;font-size:44px;font-weight:700;width:100%;outline:none;padding:0;
+  font-variant-numeric:tabular-nums}
+.campo{display:block;margin-bottom:16px}
+.campo>span,.chips legend{display:block;font-size:14px;color:var(--muted);margin-bottom:6px;padding:0}
+.campo input{width:100%;border:1.5px solid var(--line);background:var(--bg);border-radius:var(--radius-md);
+  padding:12px 14px;font-size:16px;min-height:48px}
+.campo input:focus{border-color:var(--accent);outline:none}
+.chips{border:0;margin:0 0 16px;padding:0}
+.chips-grid{display:flex;flex-wrap:wrap;gap:8px}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip>span{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);border-radius:999px;
+  padding:8px 13px;font-size:15px}
+.chip input:checked+span{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+.chip input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+.error{color:var(--danger);font-size:14px;margin:-12px 0 14px;min-height:0}
+.form-acciones{display:flex;gap:10px;margin-top:8px}
+.form-acciones .btn-primario{flex:1}
+
+.menu-bloque{border-top:1px solid var(--line);padding:16px 0}
+.menu-bloque:first-of-type{border-top:0;padding-top:0}
+.menu-bloque h3{margin:0 0 6px;font-size:16px}
+.menu-bloque p{margin:0 0 12px;color:var(--muted);font-size:15px}
+.menu-botones{display:grid;gap:10px}
+
+.toast{position:fixed;left:50%;bottom:0;margin-bottom:calc(90px + env(safe-area-inset-bottom,0px));
+  transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;
+  font-size:15px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;white-space:nowrap}
+.toast.visible{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="top-row">
+      <div class="mes">
+        <button class="icon-btn" id="prevMes" aria-label="Mes anterior">‹</button>
+        <h1 id="mesLabel" aria-live="polite">—</h1>
+        <button class="icon-btn" id="sigMes" aria-label="Mes siguiente">›</button>
+      </div>
+      <button class="icon-btn menu" id="abrirMenu" aria-label="Respaldo y ajustes">⋯</button>
+    </div>
+    <p class="total num" id="total">$0.00</p>
+    <p class="total-sub" id="totalSub">Sin gastos este mes</p>
+  </header>
+
+  <div id="avisos"></div>
+  <section class="cats" id="cats" aria-label="Gasto por categoría" hidden></section>
+  <section id="lista" aria-label="Gastos del mes"></section>
+</div>
+
+<button class="fab" id="nuevo">Agregar gasto</button>
+
+<div class="velo" id="velo" hidden></div>
+
+<div class="hoja" id="hojaGasto" role="dialog" aria-modal="true" aria-labelledby="tituloGasto" hidden>
+  <form id="formGasto" novalidate>
+    <h2 id="tituloGasto">Nuevo gasto</h2>
+    <label class="monto-wrap">
+      <span>$</span>
+      <input id="monto" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="Monto">
+    </label>
+    <p class="error" id="errorMonto" hidden>Escribe un monto mayor a cero.</p>
+    <fieldset class="chips">
+      <legend>Categoría</legend>
+      <div class="chips-grid" id="chips"></div>
+    </fieldset>
+    <label class="campo"><span>Fecha</span><input type="date" id="fecha" required></label>
+    <label class="campo"><span>Nota (opcional)</span><input id="nota" maxlength="80" placeholder="Ej. comida con el equipo" autocomplete="off"></label>
+    <div class="form-acciones">
+      <button type="button" class="btn btn-peligro" id="eliminar" hidden>Eliminar</button>
+      <button type="button" class="btn btn-sec" id="cancelar">Cancelar</button>
+      <button type="submit" class="btn btn-primario" id="guardar">Guardar gasto</button>
+    </div>
+  </form>
+</div>
+
+<div class="hoja" id="hojaMenu" role="dialog" aria-modal="true" aria-labelledby="tituloMenu" hidden>
+  <h2 id="tituloMenu">Respaldo</h2>
+  <div class="menu-bloque">
+    <p>Tus gastos se guardan solo en este celular. Guarda un respaldo de vez en cuando (por WhatsApp, correo o Drive) para no perderlos si cambias de teléfono.</p>
+    <p id="ultimoRespaldo"></p>
+    <div class="menu-botones">
+      <button class="btn btn-primario" id="exportarJSON">Guardar respaldo</button>
+      <button class="btn btn-sec" id="importarJSON">Restaurar respaldo</button>
+      <button class="btn btn-sec" id="exportarCSV">Exportar a Excel (CSV)</button>
+    </div>
+    <input type="file" id="archivo" accept=".json,application/json" hidden>
+  </div>
+  <div class="menu-bloque">
+    <h3>Almacenamiento</h3>
+    <p id="estadoAlmacen">Revisando…</p>
+  </div>
+  <div class="menu-bloque">
+    <button class="btn btn-sec" id="cerrarMenu" style="width:100%">Cerrar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- Datos fijos ---------- */
+const CATS = [
+  {id:'comida',     nombre:'Comida',     color:'#D9822B'},
+  {id:'transporte', nombre:'Transporte', color:'#3D7EA6'},
+  {id:'casa',       nombre:'Casa',       color:'#6B8F71'},
+  {id:'salud',      nombre:'Salud',      color:'#C2556B'},
+  {id:'diversion',  nombre:'Diversión',  color:'#8E6BBF'},
+  {id:'compras',    nombre:'Compras',    color:'#B8931F'},
+  {id:'servicios',  nombre:'Servicios',  color:'#3F9494'},
+  {id:'otros',      nombre:'Otros',      color:'#7D8A86'}
+];
+const catPor = Object.fromEntries(CATS.map(c => [c.id, c]));
+const fmt = new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'});
+const dinero = c => fmt.format(c / 100);
+const $ = id => document.getElementById(id);
+const KEY_RESPALDO = 'mg_ultimoRespaldo';
+const KEY_OCULTAR_INSTALAR = 'mg_ocultarInstalar';
+
+/* ---------- Utilidades ---------- */
+const pad = n => String(n).padStart(2, '0');
+function hoyISO(){ const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function aFecha(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); }
+function nuevoId(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+function aCentavos(txt){
+  let s = String(txt).trim().replace(/[\s$]/g, '');
+  if (/^\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.'); else s = s.replace(/,/g, '');
+  if (!/^\d+(\.\d{0,2})?$/.test(s)) return null;
+  const n = Math.round(parseFloat(s) * 100);
+  return n > 0 ? n : null;
+}
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('visible');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('visible'), 2200);
+}
+
+/* ---------- IndexedDB ---------- */
+const DB_NAME = 'misgastos', STORE = 'gastos';
+let db;
+function abrirDB(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, {keyPath:'id'}).createIndex('fecha', 'fecha');
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function prom(req){ return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+const leerTodos = () => prom(db.transaction(STORE, 'readonly').objectStore(STORE).getAll());
+const guardarUno = g => prom(db.transaction(STORE, 'readwrite').objectStore(STORE).put(g));
+const borrarUno = id => prom(db.transaction(STORE, 'readwrite').objectStore(STORE).delete(id));
+function guardarVarios(lista){
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite'); const s = tx.objectStore(STORE);
+    lista.forEach(g => s.put(g));
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  });
+}
+
+/* ---------- Estado ---------- */
+const hoy = new Date();
+const estado = { y: hoy.getFullYear(), m: hoy.getMonth(), gastos: [], editando: null, ocultarRespaldo: false };
+
+async function recargar(){ estado.gastos = await leerTodos(); render(); }
+
+/* ---------- Render ---------- */
+function render(){
+  const pref = estado.y + '-' + pad(estado.m + 1);
+  const delMes = estado.gastos.filter(g => g.fecha.startsWith(pref))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.creado || 0) - (a.creado || 0));
+  const total = delMes.reduce((s, g) => s + g.monto, 0);
+
+  const mesTxt = new Date(estado.y, estado.m, 1).toLocaleDateString('es-MX', {month:'long', year:'numeric'});
+  $('mesLabel').textContent = mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1);
+  $('total').textContent = dinero(total);
+  $('totalSub').textContent = delMes.length === 0 ? 'Sin gastos este mes'
+    : delMes.length === 1 ? '1 gasto este mes' : delMes.length + ' gastos este mes';
+
+  // Categorías
+  const cats = $('cats'); cats.innerHTML = '';
+  if (total > 0){
+    const porCat = {};
+    delMes.forEach(g => porCat[g.categoria] = (porCat[g.categoria] || 0) + g.monto);
+    const filas = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
+    const tira = document.createElement('div'); tira.className = 'tira'; tira.setAttribute('aria-hidden', 'true');
+    filas.forEach(([id, monto]) => {
+      const s = document.createElement('span');
+      s.style.flex = String(monto); s.style.background = (catPor[id] || catPor.otros).color;
+      tira.appendChild(s);
+    });
+    cats.appendChild(tira);
+    filas.forEach(([id, monto]) => {
+      const c = catPor[id] || catPor.otros;
+      const f = document.createElement('div'); f.className = 'cat-fila';
+      f.innerHTML = '<span class="punto"></span><span></span><span class="num"></span><span class="pct num"></span>';
+      f.children[0].style.background = c.color;
+      f.children[1].textContent = c.nombre;
+      f.children[2].textContent = dinero(monto);
+      f.children[3].textContent = Math.round(monto * 100 / total) + '%';
+      cats.appendChild(f);
+    });
+    cats.hidden = false;
+  } else cats.hidden = true;
+
+  // Lista por día
+  const lista = $('lista'); lista.innerHTML = '';
+  if (delMes.length === 0){
+    const esActual = estado.y === hoy.getFullYear() && estado.m === hoy.getMonth();
+    lista.innerHTML = '<div class="vacio"><strong></strong><span></span></div>';
+    lista.querySelector('strong').textContent = esActual ? 'Aún no hay gastos este mes' : 'No hay gastos en este mes';
+    lista.querySelector('span').textContent = esActual ? 'Toca “Agregar gasto” para registrar el primero.' : 'Usa las flechas para ver otros meses.';
+  } else {
+    const hoyStr = hoyISO();
+    const ay = new Date(); ay.setDate(ay.getDate() - 1);
+    const ayerStr = ay.getFullYear() + '-' + pad(ay.getMonth() + 1) + '-' + pad(ay.getDate());
+    const grupos = new Map();
+    delMes.forEach(g => { if (!grupos.has(g.fecha)) grupos.set(g.fecha, []); grupos.get(g.fecha).push(g); });
+    grupos.forEach((items, fecha) => {
+      const dia = document.createElement('div'); dia.className = 'dia';
+      const etiqueta = fecha === hoyStr ? 'Hoy' : fecha === ayerStr ? 'Ayer'
+        : aFecha(fecha).toLocaleDateString('es-MX', {weekday:'long', day:'numeric', month:'long'});
+      dia.innerHTML = '<div class="dia-head"><span></span><span class="num"></span></div><div class="dia-items"></div>';
+      dia.querySelector('.dia-head span:first-child').textContent = etiqueta;
+      dia.querySelector('.dia-head span:last-child').textContent = dinero(items.reduce((s, g) => s + g.monto, 0));
+      const cont = dia.querySelector('.dia-items');
+      items.forEach(g => {
+        const c = catPor[g.categoria] || catPor.otros;
+        const b = document.createElement('button'); b.className = 'item'; b.type = 'button';
+        b.innerHTML = '<span class="punto"></span><span><span class="t1"></span><span class="t2"></span></span><span class="monto num"></span>';
+        b.querySelector('.punto').style.background = c.color;
+        b.querySelector('.t1').textContent = g.nota || c.nombre;
+        b.querySelector('.t2').textContent = g.nota ? c.nombre : '';
+        b.querySelector('.monto').textContent = dinero(g.monto);
+        b.setAttribute('aria-label', (g.nota || c.nombre) + ', ' + dinero(g.monto) + '. Editar');
+        b.addEventListener('click', () => abrirGasto(g));
+        cont.appendChild(b);
+      });
+      lista.appendChild(dia);
+    });
+  }
+  renderAvisos();
+}
+
+/* ---------- Avisos (instalar y respaldo) ---------- */
+let promptInstalar = null;
+const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function crearAviso(texto, botones){
+  const a = document.createElement('div'); a.className = 'aviso';
+  const p = document.createElement('p'); p.textContent = texto; a.appendChild(p);
+  const acc = document.createElement('div'); acc.className = 'acciones';
+  botones.forEach(([txt, clase, fn]) => {
+    const b = document.createElement('button'); b.className = 'btn btn-chico ' + clase; b.textContent = txt;
+    b.addEventListener('click', fn); acc.appendChild(b);
+  });
+  a.appendChild(acc); return a;
+}
+
+function renderAvisos(){
+  const cont = $('avisos'); cont.innerHTML = '';
+  if (!esStandalone() && lsGet(KEY_OCULTAR_INSTALAR) !== '1'){
+    const ocultar = ['Ahora no', 'btn-sec', () => { lsSet(KEY_OCULTAR_INSTALAR, '1'); renderAvisos(); }];
+    if (esIOS){
+      cont.appendChild(crearAviso('Instálala para usarla sin internet: en Safari toca el botón Compartir y elige “Agregar a inicio”. Captura tus gastos desde el ícono instalado, no desde Safari.', [ocultar]));
+    } else if (promptInstalar){
+      cont.appendChild(crearAviso('Instálala en tu celular para usarla sin internet.', [
+        ['Instalar app', 'btn-primario', async () => { promptInstalar.prompt(); await promptInstalar.userChoice; promptInstalar = null; renderAvisos(); }],
+        ocultar]));
+    } else {
+      cont.appendChild(crearAviso('Instálala para usarla sin internet: abre el menú de Chrome (⋮) y elige “Instalar app” o “Agregar a pantalla principal”.', [ocultar]));
+    }
+  }
+  const ult = Number(lsGet(KEY_RESPALDO) || 0);
+  const dias = ult ? (Date.now() - ult) / 86400000 : Infinity;
+  if (!estado.ocultarRespaldo && estado.gastos.length >= 5 && dias > 14){
+    cont.appendChild(crearAviso(ult ? 'Tu último respaldo tiene más de dos semanas. Guarda uno nuevo para no perder tus gastos.'
+      : 'Tus gastos solo están en este celular. Guarda un respaldo para no perderlos.', [
+      ['Guardar respaldo', 'btn-primario', exportarJSON],
+      ['Después', 'btn-sec', () => { estado.ocultarRespaldo = true; renderAvisos(); }]]));
+  }
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptInstalar = e; renderAvisos(); });
+window.addEventListener('appinstalled', () => { promptInstalar = null; renderAvisos(); });
+
+/* ---------- Hojas ---------- */
+let hojaActual = null, focoPrevio = null;
+function abrirHoja(hoja){
+  focoPrevio = document.activeElement;
+  hojaActual = hoja;
+  $('velo').hidden = false; hoja.hidden = false;
+  requestAnimationFrame(() => { $('velo').classList.add('abierta'); hoja.classList.add('abierta'); });
+}
+function cerrarHoja(){
+  if (!hojaActual) return;
+  const h = hojaActual; hojaActual = null;
+  $('velo').classList.remove('abierta'); h.classList.remove('abierta');
+  setTimeout(() => { h.hidden = true; $('velo').hidden = true; }, 260);
+  if (focoPrevio && focoPrevio.focus) focoPrevio.focus();
+}
+$('velo').addEventListener('click', cerrarHoja);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarHoja(); });
+
+/* ---------- Formulario de gasto ---------- */
+CATS.forEach((c, i) => {
+  const l = document.createElement('label'); l.className = 'chip';
+  l.innerHTML = '<input type="radio" name="categoria"><span><span class="punto"></span></span>';
+  const inp = l.querySelector('input'); inp.value = c.id; if (i === 0) inp.checked = true;
+  l.querySelector('.punto').style.background = c.color;
+  l.querySelector('span').appendChild(document.createTextNode(c.nombre));
+  $('chips').appendChild(l);
+});
+
+function abrirGasto(g){
+  estado.editando = g || null;
+  $('tituloGasto').textContent = g ? 'Editar gasto' : 'Nuevo gasto';
+  $('guardar').textContent = g ? 'Guardar cambios' : 'Guardar gasto';
+  $('eliminar').hidden = !g;
+  $('monto').value = g ? (g.monto / 100).toFixed(2) : '';
+  $('fecha').value = g ? g.fecha : hoyISO();
+  $('nota').value = g ? (g.nota || '') : '';
+  const cat = g ? g.categoria : 'comida';
+  document.querySelectorAll('input[name="categoria"]').forEach(r => r.checked = r.value === cat);
+  $('errorMonto').hidden = true;
+  abrirHoja($('hojaGasto'));
+  if (!g) $('monto').focus();
+}
+
+$('nuevo').addEventListener('click', () => abrirGasto(null));
+$('cancelar').addEventListener('click', cerrarHoja);
+
+$('formGasto').addEventListener('submit', async e => {
+  e.preventDefault();
+  const monto = aCentavos($('monto').value);
+  if (!monto){ $('errorMonto').hidden = false; $('monto').focus(); return; }
+  const fecha = $('fecha').value || hoyISO();
+  const sel = document.querySelector('input[name="categoria"]:checked');
+  const previo = estado.editando;
+  const g = {
+    id: previo ? previo.id : nuevoId(),
+    monto, fecha,
+    categoria: sel ? sel.value : 'otros',
+    nota: $('nota').value.trim(),
+    creado: previo ? previo.creado : Date.now(),
+    modificado: Date.now()
+  };
+  try {
+    await guardarUno(g);
+    const f = aFecha(fecha); estado.y = f.getFullYear(); estado.m = f.getMonth();
+    cerrarHoja(); await recargar();
+    toast(previo ? 'Cambios guardados' : 'Gasto guardado');
+  } catch(err){ toast('No se pudo guardar. Intenta de nuevo.'); }
+});
+
+$('eliminar').addEventListener('click', async () => {
+  const g = estado.editando; if (!g) return;
+  if (!confirm('¿Eliminar este gasto de ' + dinero(g.monto) + '?')) return;
+  await borrarUno(g.id); cerrarHoja(); await recargar(); toast('Gasto eliminado');
+});
+
+/* ---------- Navegación de meses ---------- */
+$('prevMes').addEventListener('click', () => { estado.m--; if (estado.m < 0){ estado.m = 11; estado.y--; } render(); });
+$('sigMes').addEventListener('click', () => { estado.m++; if (estado.m > 11){ estado.m = 0; estado.y++; } render(); });
+
+/* ---------- Respaldo ---------- */
+async function compartirODescargar(contenido, nombre, mime){
+  const blob = new Blob([contenido], {type: mime});
+  try {
+    const file = new File([blob], nombre, {type: mime});
+    if (navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title: nombre});
+      return true;
+    }
+  } catch(err){
+    if (err && err.name === 'AbortError') return false;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return true;
+}
+
+async function exportarJSON(){
+  const datos = { app:'misgastos', version:1, exportado:new Date().toISOString(), gastos: estado.gastos };
+  const ok = await compartirODescargar(JSON.stringify(datos, null, 1), 'respaldo-gastos-' + hoyISO() + '.json', 'application/json');
+  if (ok){ lsSet(KEY_RESPALDO, String(Date.now())); estado.ocultarRespaldo = true; renderMenu(); renderAvisos(); toast('Respaldo guardado'); }
+}
+
+async function exportarCSV(){
+  const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const filas = [['Fecha','Categoría','Monto','Nota']].concat(
+    [...estado.gastos].sort((a, b) => a.fecha.localeCompare(b.fecha))
+      .map(g => [g.fecha, (catPor[g.categoria] || catPor.otros).nombre, (g.monto / 100).toFixed(2), g.nota || '']));
+  const csv = '\uFEFF' + filas.map(f => f.map(esc).join(',')).join('\r\n');
+  const ok = await compartirODescargar(csv, 'gastos-' + hoyISO() + '.csv', 'text/csv');
+  if (ok) toast('Archivo CSV listo');
+}
+
+function validarGasto(x){
+  if (!x || typeof x !== 'object') return null;
+  const monto = Number.isInteger(x.monto) ? x.monto : null;
+  if (!monto || monto <= 0) return null;
+  if (typeof x.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x.fecha)) return null;
+  return {
+    id: typeof x.id === 'string' && x.id ? x.id : nuevoId(),
+    monto, fecha: x.fecha,
+    categoria: catPor[x.categoria] ? x.categoria : 'otros',
+    nota: typeof x.nota === 'string' ? x.nota.slice(0, 80) : '',
+    creado: Number(x.creado) || Date.now(),
+    modificado: Number(x.modificado) || Date.now()
+  };
+}
+
+$('archivo').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const datos = JSON.parse(await f.text());
+    const lista = Array.isArray(datos) ? datos : datos.gastos;
+    if (!Array.isArray(lista)) throw new Error('formato');
+    const validos = lista.map(validarGasto).filter(Boolean);
+    if (validos.length === 0){ toast('El archivo no tiene gastos válidos'); return; }
+    const existentes = new Set(estado.gastos.map(g => g.id));
+    const nuevos = validos.filter(g => !existentes.has(g.id)).length;
+    const msg = 'El respaldo tiene ' + validos.length + ' gastos (' + nuevos + ' nuevos). Los que ya tienes se actualizarán con la versión del respaldo. ¿Continuar?';
+    if (!confirm(msg)) return;
+    await guardarVarios(validos);
+    await recargar(); cerrarHoja();
+    toast('Respaldo restaurado: ' + validos.length + ' gastos');
+  } catch(err){
+    toast('Ese archivo no es un respaldo de Mis Gastos');
+  }
+});
+
+$('exportarJSON').addEventListener('click', exportarJSON);
+$('exportarCSV').addEventListener('click', exportarCSV);
+$('importarJSON').addEventListener('click', () => $('archivo').click());
+
+/* ---------- Menú ---------- */
+let persistente = null;
+function renderMenu(){
+  const ult = Number(lsGet(KEY_RESPALDO) || 0);
+  $('ultimoRespaldo').textContent = ult
+    ? 'Último respaldo: ' + new Date(ult).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'}) + '.'
+    : 'Aún no has guardado ningún respaldo.';
+  $('ultimoRespaldo').style.color = ult ? '' : 'var(--danger)';
+  $('estadoAlmacen').textContent = persistente === true
+    ? 'Protegido: el sistema no borrará tus datos para liberar espacio. ' + estado.gastos.length + ' gastos guardados.'
+    : persistente === false
+      ? 'Sin protección garantizada: el sistema podría borrar los datos si no usas la app en mucho tiempo. Mantén tus respaldos al día. ' + estado.gastos.length + ' gastos guardados.'
+      : estado.gastos.length + ' gastos guardados en este celular.';
+}
+$('abrirMenu').addEventListener('click', () => { renderMenu(); abrirHoja($('hojaMenu')); });
+$('cerrarMenu').addEventListener('click', cerrarHoja);
+
+async function pedirPersistencia(){
+  try {
+    if (navigator.storage && navigator.storage.persist){
+      persistente = await navigator.storage.persisted();
+      if (!persistente) persistente = await navigator.storage.persist();
+    }
+  } catch(e){ persistente = null; }
+}
+
+/* ---------- Inicio ---------- */
+async function iniciar(){
+  try {
+    db = await abrirDB();
+  } catch(err){
+    $('lista').innerHTML = '<div class="vacio"><strong>No se pudo abrir el almacenamiento</strong><span>Si estás en modo privado del navegador, ábrela en una pestaña normal.</span></div>';
+    return;
+  }
+  await recargar();
+  pedirPersistencia();
+}
+iniciar();
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+})();
+</script>
+</body>
+</html>
