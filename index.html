@@ -197,6 +197,26 @@ button{cursor:pointer}
 .chip input:checked+span{border-color:var(--ink);background:var(--ink);color:var(--surface)}
 .chip input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
 .error{color:var(--danger);font-size:14px;margin:0 0 12px}
+.extras{border-top:1px solid var(--line);padding-top:14px;margin-bottom:6px}
+.extra-opc{background:var(--bg);border-radius:var(--radius-md);padding:12px 12px 2px;margin:-2px 0 14px}
+.extra-opc .seg{background:var(--surface)}
+.extra-opc .seg input:checked+span{background:var(--bg)}
+.extra-opc .campo input:not([type=checkbox]){background:var(--surface)}
+.msi-cuota{margin:0 0 6px;font-size:15px}
+.msi-calc .msi-cuota{color:var(--ink)}
+.msi-cuota strong{font-size:28px;letter-spacing:-.01em}
+.msi-calc p{margin:0 0 8px;font-size:14px;color:var(--muted)}
+.msi-calc p.ayuda{margin:0 0 10px}
+.bloque-tarjeta{display:grid;gap:8px}
+.sub-tit{margin:6px 6px 0;font-size:14px;color:var(--muted)}
+.fila-pago{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:11px 16px;border-top:1px solid var(--line);font-size:15px}
+.fila-pago:first-child{border-top:0}
+.fila-pago .estado{grid-column:1 / -1;font-size:13px;color:var(--muted)}
+.fila-pago.hecho .estado{color:var(--pos)}
+.msi-resumen{color:var(--muted);font-size:15px;margin:0 0 14px}
+.msi-resumen strong{color:var(--ink)}
+.seg-modo{margin:0 0 12px}
+.seg-modo span{font-size:13.5px;padding:7px 4px}
 .form-acciones{display:flex;gap:10px;margin-top:8px}
 .form-acciones .btn-primario{flex:1}
 
@@ -287,6 +307,25 @@ button{cursor:pointer}
     <fieldset class="chips" id="movGrupoMetodo"><legend>Pagado con</legend><div class="chips-grid" id="movMetodos"></div></fieldset>
     <label class="campo"><span>Fecha</span><input type="date" id="movFecha"></label>
     <label class="campo"><span>Nota (opcional)</span><input id="movNota" maxlength="80" placeholder="Ej. comida con el equipo" autocomplete="off"></label>
+    <div class="extras" id="movExtras">
+      <label class="check"><input type="checkbox" id="movRepetir"><span>Repetir cada mes</span></label>
+      <div class="extra-opc" id="movRepetirOpc" hidden>
+        <label class="check" id="movCorteWrap" hidden><input type="checkbox" id="movUsarCorte"><span id="movCorteTxt"></span></label>
+        <div class="seg seg3 mini" role="radiogroup" aria-label="Duración">
+          <label><input type="radio" name="durMov" value="siempre" checked><span>Para siempre</span></label>
+          <label><input type="radio" name="durMov" value="meses"><span>Nº de meses</span></label>
+          <label><input type="radio" name="durMov" value="hasta"><span>Hasta un mes</span></label>
+        </div>
+        <label class="campo" id="movMesesWrap" hidden><span>¿Cuántos meses en total? (incluye este)</span><input id="movMeses" class="solo-num" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="Ej. 12" autocomplete="off"></label>
+        <label class="campo" id="movHastaWrap" hidden><span>Último cobro en</span><input type="month" id="movHasta"></label>
+        <p class="ayuda" id="movRepetirTxt"></p>
+      </div>
+      <label class="check" id="movMsiWrap" hidden><input type="checkbox" id="movMsi"><span>A meses sin intereses</span></label>
+      <div class="extra-opc" id="movMsiOpc" hidden>
+        <label class="campo"><span>Número de meses</span><input id="movMsiMeses" class="solo-num" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="Ej. 12" autocomplete="off"></label>
+        <div class="msi-calc" id="movMsiCalc" aria-live="polite"></div>
+      </div>
+    </div>
     <p class="error" id="errorMov" hidden></p>
     <div class="form-acciones">
       <button type="button" class="btn btn-peligro" id="eliminarMov" hidden>Eliminar</button>
@@ -348,6 +387,17 @@ button{cursor:pointer}
       <button type="submit" class="btn btn-primario" id="guardarRec">Guardar</button>
     </div>
   </form>
+</div>
+
+<!-- Hoja: compra a meses sin intereses -->
+<div class="hoja" id="hojaMsi" role="dialog" aria-modal="true" aria-labelledby="tituloMsi" hidden>
+  <h2 id="tituloMsi">Compra a meses</h2>
+  <div class="msi-resumen" id="msiResumen"></div>
+  <div class="grupo" id="msiPagos"></div>
+  <div class="form-acciones" style="margin-top:16px">
+    <button type="button" class="btn btn-peligro" id="eliminarMsi">Eliminar compra</button>
+    <button type="button" class="btn btn-sec" data-cerrar style="flex:1">Cerrar</button>
+  </div>
 </div>
 
 <!-- Hoja: menú de respaldo -->
@@ -442,8 +492,8 @@ function toast(msg, alerta){
 function mostrarError(id, msg){ const e = $(id); e.textContent = msg; e.hidden = false; }
 
 /* ================= IndexedDB ================= */
-const DB_NAME = 'misgastos', DB_VER = 2;
-const S = {mov:'gastos', tar:'tarjetas', rec:'recurrentes', aj:'ajustes'};
+const DB_NAME = 'misgastos', DB_VER = 3;
+const S = {mov:'gastos', tar:'tarjetas', rec:'recurrentes', aj:'ajustes', msi:'msi'};
 let db;
 function abrirDB(){
   return new Promise((res, rej) => {
@@ -454,6 +504,7 @@ function abrirDB(){
       if (!d.objectStoreNames.contains(S.tar)) d.createObjectStore(S.tar, {keyPath:'id'});
       if (!d.objectStoreNames.contains(S.rec)) d.createObjectStore(S.rec, {keyPath:'id'});
       if (!d.objectStoreNames.contains(S.aj))  d.createObjectStore(S.aj,  {keyPath:'clave'});
+      if (!d.objectStoreNames.contains(S.msi)) d.createObjectStore(S.msi, {keyPath:'id'});
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -477,7 +528,7 @@ function escribir(ops){
 const hoy = new Date();
 const estado = {
   y: hoy.getFullYear(), m: hoy.getMonth(), vista: 'mov',
-  movs: [], tarjetas: [], recs: [], pres: {general:null, porMetodo:{}},
+  movs: [], tarjetas: [], recs: [], msis: [], pres: {general:null, porMetodo:{}, modo:{}},
   editMov: null, editTar: null, editRec: null, ocultarRespaldo: false
 };
 const perVista = () => perDe(estado.y, estado.m);
@@ -488,13 +539,15 @@ function normMov(g){
   return g;
 }
 async function cargar(){
-  const [movs, tar, rec, aj] = await Promise.all([leer(S.mov), leer(S.tar), leer(S.rec), leer(S.aj)]);
+  const [movs, tar, rec, aj, msi] = await Promise.all([leer(S.mov), leer(S.tar), leer(S.rec), leer(S.aj), leer(S.msi)]);
+  estado.msis = msi.sort((a, b) => (a.creado || 0) - (b.creado || 0));
   estado.movs = movs.map(normMov);
   estado.tarjetas = tar.sort((a, b) => (a.creado || 0) - (b.creado || 0));
   estado.recs = rec.sort((a, b) => (a.creado || 0) - (b.creado || 0));
   const p = aj.find(a => a.clave === 'presupuestos');
   estado.pres = p && p.valor ? p.valor : {general:null, porMetodo:{}};
   if (!estado.pres.porMetodo) estado.pres.porMetodo = {};
+  if (!estado.pres.modo) estado.pres.modo = {};
 }
 async function recargar(){ await cargar(); render(); }
 
@@ -507,10 +560,35 @@ function metodoNombre(id){
 function metodoColor(id){ const t = tarPor(id); return t ? t.color : '#7D8A86'; }
 // Disponible = lo que capturaste como disponible menos los gastos registrados después de esa captura
 function disponible(t, excluirId){
-  const fechaBase = isoDe(new Date(t.baseDesde));
-  return t.disponibleBase - sumar(estado.movs.filter(g =>
+  const fechaBase = isoDe(new Date(t.baseDesde)), hoyS = hoyISO();
+  let d = t.disponibleBase - sumar(estado.movs.filter(g =>
     g.tipo === 'gasto' && g.metodo === t.id && (g.creado || 0) > t.baseDesde && g.id !== excluirId &&
-    !(g.recurrenteId && g.fecha < fechaBase)));
+    !g.msiId && !(g.recurrenteId && g.fecha < fechaBase)));
+  // Meses sin intereses: se descuenta el total al comprar y se libera una mensualidad en cada corte
+  estado.msis.filter(c => c.tarjetaId === t.id).forEach(c => {
+    const cortes = cortesMsi(c, t);
+    const posterior = (c.creado || 0) > t.baseDesde && c.fecha >= fechaBase;
+    if (posterior) d -= c.total;
+    cortes.forEach((f, i) => { if (f <= hoyS && (posterior || f > fechaBase)) d += cuota(c, i + 1); });
+  });
+  return d;
+}
+/* ---- Meses sin intereses ---- */
+function cortesMsi(c, t){
+  const per = c.fecha.slice(0, 7);
+  let c1 = isoConDia(per, t.diaCorte);
+  if (c1 < c.fecha) c1 = isoConDia(perSum(per, 1), t.diaCorte);
+  const out = [];
+  for (let k = 0; k < c.meses; k++) out.push(isoConDia(perSum(c1.slice(0, 7), k), t.diaCorte));
+  return out;
+}
+function cuota(c, k){ const base = Math.floor(c.total / c.meses); return k === c.meses ? c.total - base * (c.meses - 1) : base; }
+function infoMsi(c){
+  const t = tarPor(c.tarjetaId); if (!t) return null;
+  const cortes = cortesMsi(c, t), hoyS = hoyISO();
+  const pagados = cortes.filter(f => f <= hoyS).length;
+  let pagado = 0; for (let k = 1; k <= pagados; k++) pagado += cuota(c, k);
+  return {t, cortes, pagados, restante: c.total - pagado, prox: cortes[pagados] || null};
 }
 function infoCorte(t){
   const hoyS = hoyISO(), perHoy = hoyS.slice(0, 7);
@@ -548,7 +626,7 @@ function proximoCargo(r){
   return null;
 }
 // Crea los movimientos de cada mes cuya fecha de cobro ya llegó y que aún no se habían creado
-async function generarRecurrentes(){
+async function generarAutomaticos(){
   const hoyS = hoyISO(), perHoy = hoyS.slice(0, 7);
   const ops = []; let n = 0; const base = Date.now();
   for (const r of estado.recs){
@@ -569,24 +647,51 @@ async function generarRecurrentes(){
     }
     if (cambio) ops.push({s:S.rec, put:r});
   }
+  for (const c of estado.msis){
+    const t = tarPor(c.tarjetaId); if (!t) continue;
+    let cambio = false;
+    cortesMsi(c, t).forEach((f, i) => {
+      const k = i + 1;
+      if (f <= hoyS && !c.generados.includes(k)){
+        ops.push({s:S.mov, put:{id:nuevoId(), tipo:'gasto', monto:cuota(c, k), categoria:c.categoria, metodo:c.tarjetaId,
+          fecha:f, nota:c.concepto + ' (pago ' + k + ' de ' + c.meses + ')', msiId:c.id, creado:base + n, modificado:base + n}});
+        c.generados.push(k); cambio = true; n++;
+      }
+    });
+    if (cambio) ops.push({s:S.msi, put:c});
+  }
   await escribir(ops);
   return n;
 }
 
 /* ================= Presupuestos: cálculos ================= */
+// Rango (desde exclusivo, hasta inclusivo) que mide el presupuesto de un método en el mes p
+function rangoMetodo(met, p){
+  const t = tarPor(met);
+  if (t && estado.pres.modo[met] === 'corte'){
+    const prox = p === hoyISO().slice(0, 7) ? infoCorte(t).prox : isoConDia(p, t.diaCorte);
+    return {desde: isoConDia(perSum(prox.slice(0, 7), -1), t.diaCorte), hasta: prox, corte: true};
+  }
+  return {desde: perSum(p, -1) + '-31', hasta: p + '-31', corte: false};
+}
+function gastadoMetodo(met, p){
+  const r = rangoMetodo(met, p);
+  return sumar(estado.movs.filter(g => g.tipo === 'gasto' && g.metodo === met && g.fecha > r.desde && g.fecha <= r.hasta));
+}
+function diaSig(iso){ const d = aFecha(iso); d.setDate(d.getDate() + 1); return isoDe(d); }
 function excedidos(p){
-  const gs = estado.movs.filter(g => g.tipo === 'gasto' && g.fecha.startsWith(p));
   const pr = estado.pres, res = [];
-  const tot = sumar(gs);
+  const tot = sumar(estado.movs.filter(g => g.tipo === 'gasto' && g.fecha.startsWith(p)));
   if (pr.general && tot > pr.general) res.push({clave:'general', nombre:'general', limite:pr.general, gastado:tot});
   Object.entries(pr.porMetodo || {}).forEach(([met, lim]) => {
     if (!lim || (met !== 'efectivo' && !tarPor(met))) return;
-    const g = sumar(gs.filter(x => x.metodo === met));
-    if (g > lim) res.push({clave:met, nombre:metodoNombre(met), limite:lim, gastado:g});
+    const g = gastadoMetodo(met, p);
+    if (g > lim) res.push({clave:met, nombre:metodoNombre(met), limite:lim, gastado:g, corte:rangoMetodo(met, p).corte});
   });
   return res;
 }
-const textoExceso = e => (e.clave === 'general' ? 'Superaste tu presupuesto general' : 'Superaste el presupuesto de ' + e.nombre)
+const textoExceso = e => (e.clave === 'general' ? 'Superaste tu presupuesto general'
+  : 'Superaste el presupuesto de ' + e.nombre + (e.corte ? ' en este periodo de corte' : ''))
   + ' por ' + dinero(e.gastado - e.limite) + '.';
 
 /* ================= Render ================= */
@@ -668,6 +773,7 @@ function renderMov(){
         if (g.nota) partes.push(c.nombre);
         if (g.tipo === 'gasto') partes.push(metodoNombre(g.metodo));
         if (g.recurrenteId) partes.push('recurrente');
+        if (g.msiId) partes.push('meses sin intereses');
         cont.appendChild(itemBoton(c.color, g.nota || c.nombre, partes.join(', '), null,
           (g.tipo === 'ingreso' ? '+' : '') + dinero(g.monto), g.tipo === 'ingreso' ? 'pos' : '', () => abrirMov(g)));
       });
@@ -710,7 +816,22 @@ function renderTar(){
     b.append(arriba, medio, pie);
     b.setAttribute('aria-label', t.nombre + ', disponible ' + dinero(d) + '. Editar');
     b.addEventListener('click', () => abrirTar(t));
-    cont.appendChild(b);
+    const bloque = el('div', 'bloque-tarjeta'); bloque.appendChild(b);
+    const compras = estado.msis.filter(c => c.tarjetaId === t.id);
+    if (compras.length){
+      let deuda = 0;
+      const grupo = el('div', 'grupo');
+      compras.forEach(c => {
+        const i = infoMsi(c); deuda += i.restante;
+        const t3 = i.restante > 0 ? 'Te faltan ' + dinero(i.restante) + '. Próximo pago: ' + fechaCorta(i.prox) : 'Liquidada';
+        const it = itemBoton(t.color, c.concepto, 'Pago ' + i.pagados + ' de ' + c.meses + ', ' + dinero(cuota(c, 1)) + ' al mes', t3,
+          dinero(c.total), '', () => abrirMsi(c));
+        if (i.restante <= 0) it.style.opacity = '.55';
+        grupo.appendChild(it);
+      });
+      bloque.append(el('p', 'sub-tit', 'Meses sin intereses: debes ' + dinero(deuda)), grupo);
+    }
+    cont.appendChild(bloque);
   });
   $('totalTar').innerHTML = '';
   $('totalTar').append('Crédito disponible total: ', el('strong', 'num', dinero(total)));
@@ -758,8 +879,8 @@ function renderPres(){
   const p = perVista();
   const gs = estado.movs.filter(g => g.tipo === 'gasto' && g.fecha.startsWith(p));
   const filas = [{clave:'general', nombre:'General', color:'var(--ink)', gastado:sumar(gs), limite:estado.pres.general}]
-    .concat(metodosItems().map(m => ({clave:m.id, nombre:m.nombre, color:m.color,
-      gastado:sumar(gs.filter(g => g.metodo === m.id)), limite:estado.pres.porMetodo[m.id] || null})));
+    .concat(metodosItems().map(m => ({clave:m.id, nombre:m.nombre, color:m.color, rango:rangoMetodo(m.id, p),
+      gastado:gastadoMetodo(m.id, p), limite:estado.pres.porMetodo[m.id] || null})));
   filas.forEach(f => {
     const caja = el('div', 'pres-fila');
     const cab = el('div', 'pres-cab'); const pt = el('span', 'punto'); pt.style.background = f.color;
@@ -770,15 +891,25 @@ function renderPres(){
     inpWrap.append(el('span', null, '$'), inp);
     cab.append(pt, el('strong', null, f.nombre), inpWrap);
     caja.appendChild(cab);
+    if (tarPor(f.clave)){
+      const seg = el('div', 'seg mini seg-modo'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', 'Cómo medir el presupuesto de ' + f.nombre);
+      [['calendario', 'Mes calendario'], ['corte', 'Periodo de corte']].forEach(([v, txt]) => {
+        const l = el('label'); const r = el('input'); r.type = 'radio'; r.name = 'modo_' + f.clave; r.value = v;
+        r.checked = (estado.pres.modo[f.clave] || 'calendario') === v;
+        l.append(r, el('span', null, txt)); seg.appendChild(l);
+      });
+      caja.appendChild(seg);
+    }
+    const periodo = f.rango && f.rango.corte ? ' (del ' + fechaCorta(diaSig(f.rango.desde)) + ' al ' + fechaCorta(f.rango.hasta) + ')' : '';
     if (f.limite){
       const pct = f.gastado / f.limite;
       const prog = el('div', 'prog'); const bar = el('span', pct > 1 ? 'pasado' : pct >= .8 ? 'medio' : '');
       bar.style.width = Math.min(100, pct * 100) + '%'; prog.appendChild(bar);
-      const txt = pct > 1 ? 'Te pasaste por ' + dinero(f.gastado - f.limite) + ' (llevas ' + dinero(f.gastado) + ')'
-        : 'Llevas ' + dinero(f.gastado) + ' de ' + dinero(f.limite) + ', te quedan ' + dinero(f.limite - f.gastado);
+      const txt = (pct > 1 ? 'Te pasaste por ' + dinero(f.gastado - f.limite) + ' (llevas ' + dinero(f.gastado) + ')'
+        : 'Llevas ' + dinero(f.gastado) + ' de ' + dinero(f.limite) + ', te quedan ' + dinero(f.limite - f.gastado)) + periodo;
       const pt2 = el('p', 'pres-txt', txt); if (pct > 1) pt2.classList.add('neg');
       caja.append(prog, pt2);
-    } else caja.appendChild(el('p', 'pres-txt', 'Llevas ' + dinero(f.gastado) + ' este mes.'));
+    } else caja.appendChild(el('p', 'pres-txt', 'Llevas ' + dinero(f.gastado) + (periodo ? ' en este corte' + periodo : ' este mes') + '.'));
     cont.appendChild(caja);
   });
 }
@@ -854,24 +985,68 @@ function llenarChips(cont, name, items, sel){
 function prepararMov(tipo){
   const g = estado.editMov;
   $('tituloMov').textContent = (g ? 'Editar ' : 'Nuevo ') + tipo;
-  $('guardarMov').textContent = g ? 'Guardar cambios' : 'Guardar ' + tipo;
   llenarChips($('movCats'), 'movCat', tipo === 'gasto' ? CATS_GASTO : CATS_ING, g && g.tipo === tipo ? g.categoria : null);
   $('movGrupoMetodo').hidden = tipo !== 'gasto';
   llenarChips($('movMetodos'), 'movMet', metodosItems(g && g.id), g && g.metodo ? g.metodo : 'efectivo');
+  document.querySelectorAll('input[name="movMet"]').forEach(i => i.addEventListener('change', actualizarMovUI));
+  actualizarMovUI();
+}
+function tarjetaMov(){
+  const met = valRadio('tipoMov') === 'gasto' ? valRadio('movMet') : null;
+  return met && met !== 'efectivo' ? tarPor(met) : null;
+}
+function actualizarMovUI(){
+  const tipo = valRadio('tipoMov'), t = tarjetaMov(), nuevo = !estado.editMov;
+  $('movExtras').hidden = !nuevo;
+  $('movMsiWrap').hidden = !t;
+  if (!t){ $('movMsi').checked = false; $('movUsarCorte').checked = false; }
+  $('movRepetirOpc').hidden = !$('movRepetir').checked;
+  $('movMsiOpc').hidden = !$('movMsi').checked;
+  $('movCorteWrap').hidden = !t;
+  if (t) $('movCorteTxt').textContent = 'Los siguientes meses, en la fecha de corte de ' + t.nombre + ' (día ' + t.diaCorte + ')';
+  const dur = valRadio('durMov');
+  $('movMesesWrap').hidden = dur !== 'meses';
+  $('movHastaWrap').hidden = dur !== 'hasta';
+  const fecha = $('movFecha').value || hoyISO();
+  $('movRepetirTxt').textContent = t && $('movUsarCorte').checked
+    ? 'Este se registra con la fecha que pusiste y los siguientes en cada corte de ' + t.nombre + '.'
+    : 'Se registrará solo cada mes el día ' + Number(fecha.slice(8)) + '.';
+  $('guardarMov').textContent = !nuevo ? 'Guardar cambios' : $('movMsi').checked ? 'Guardar compra a meses' : 'Guardar ' + tipo;
+  calcMsi(t);
+}
+function calcMsi(t){
+  const box = $('movMsiCalc'); box.innerHTML = '';
+  if (!t || !$('movMsi').checked) return;
+  const total = aCentavos($('movMonto').value), n = parseInt($('movMsiMeses').value, 10);
+  if (!total || !(n >= 1)){ box.appendChild(el('p', 'ayuda', 'Escribe el monto y el número de meses para ver tu mensualidad.')); return; }
+  const c = {total, meses:n, fecha:$('movFecha').value || hoyISO()};
+  const cortes = cortesMsi(c, t), disp = disponible(t);
+  const big = el('p', 'msi-cuota'); big.append(el('strong', 'num', dinero(cuota(c, 1))), ' al mes'); box.appendChild(big);
+  const ultimo = cuota(c, n) !== cuota(c, 1) ? ' (el último de ' + dinero(cuota(c, n)) + ')' : '';
+  const fl = iso => aFecha(iso).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'});
+  box.appendChild(el('p', null, n + (n === 1 ? ' pago' : ' pagos') + ultimo + ' en cada corte de ' + t.nombre + (n === 1 ? ', el ' + fl(cortes[0]) : ', del ' + fl(cortes[0]) + ' al ' + fl(cortes[n - 1])) + '.'));
+  box.appendChild(el('p', null, 'Se descuentan ' + dinero(total) + ' del disponible (' + dinero(disp) + ' → ' + dinero(disp - total) + ') y en cada corte se libera una mensualidad.'));
 }
 function abrirMov(g){
   estado.editMov = g || null;
   const tipo = g ? g.tipo : 'gasto';
-  setRadio('tipoMov', tipo); prepararMov(tipo);
-  $('eliminarMov').hidden = !g;
   $('movMonto').value = g ? (g.monto / 100).toFixed(2) : '';
   $('movFecha').value = g ? g.fecha : hoyISO();
   $('movNota').value = g ? (g.nota || '') : '';
+  $('movRepetir').checked = false; $('movMsi').checked = false; $('movUsarCorte').checked = false;
+  setRadio('durMov', 'siempre'); $('movMeses').value = ''; $('movHasta').value = ''; $('movMsiMeses').value = '';
+  setRadio('tipoMov', tipo); prepararMov(tipo);
+  $('eliminarMov').hidden = !g;
   $('errorMov').hidden = true;
   abrirHoja($('hojaMov'));
   if (!g) $('movMonto').focus();
 }
 document.querySelectorAll('input[name="tipoMov"]').forEach(r => r.addEventListener('change', () => prepararMov(valRadio('tipoMov'))));
+document.querySelectorAll('input[name="durMov"]').forEach(r => r.addEventListener('change', actualizarMovUI));
+['movMonto', 'movMsiMeses', 'movFecha'].forEach(id => $(id).addEventListener('input', actualizarMovUI));
+$('movUsarCorte').addEventListener('change', actualizarMovUI);
+$('movRepetir').addEventListener('change', () => { if ($('movRepetir').checked) $('movMsi').checked = false; actualizarMovUI(); });
+$('movMsi').addEventListener('change', () => { if ($('movMsi').checked){ $('movRepetir').checked = false; } actualizarMovUI(); if ($('movMsi').checked) $('movMsiMeses').focus(); });
 
 $('formMov').addEventListener('submit', async e => {
   e.preventDefault(); $('errorMov').hidden = true;
@@ -880,6 +1055,26 @@ $('formMov').addEventListener('submit', async e => {
   const tipo = valRadio('tipoMov'), previo = estado.editMov;
   const fecha = $('movFecha').value || hoyISO();
   const metodo = tipo === 'gasto' ? (valRadio('movMet') || 'efectivo') : undefined;
+  const esMsi = !previo && tipo === 'gasto' && !!tarPor(metodo) && $('movMsi').checked;
+  const repetir = !previo && !esMsi && $('movRepetir').checked;
+  let nMsi = 0, duracion = null;
+  if (esMsi){
+    nMsi = parseInt($('movMsiMeses').value, 10);
+    if (!(nMsi >= 1 && nMsi <= 60)){ mostrarError('errorMov', 'Escribe el número de meses, de 1 a 60.'); $('movMsiMeses').focus(); return; }
+  }
+  if (repetir){
+    const modo = valRadio('durMov'); duracion = {modo};
+    if (modo === 'meses'){
+      const n = parseInt($('movMeses').value, 10);
+      if (!(n >= 1 && n <= 600)){ mostrarError('errorMov', 'Escribe cuántos meses, de 1 a 600.'); return; }
+      duracion.meses = n;
+    } else if (modo === 'hasta'){
+      const h = $('movHasta').value;
+      if (!/^\d{4}-\d{2}$/.test(h)){ mostrarError('errorMov', 'Elige el mes del último cobro.'); return; }
+      if (h < fecha.slice(0, 7)){ mostrarError('errorMov', 'El último cobro no puede ser antes de este mes.'); return; }
+      duracion.hasta = h;
+    }
+  }
   if (tipo === 'gasto' && metodo !== 'efectivo'){
     const t = tarPor(metodo);
     if (t){ const disp = disponible(t, previo && previo.id);
@@ -893,16 +1088,36 @@ $('formMov').addEventListener('submit', async e => {
   };
   if (metodo) g.metodo = metodo;
   if (previo && previo.recurrenteId) g.recurrenteId = previo.recurrenteId;
+  if (previo && previo.msiId) g.msiId = previo.msiId;
   const per = fecha.slice(0, 7);
   const antes = new Set(excedidos(per).map(x => x.clave));
-  try { await escribir([{s:S.mov, put:g}]); }
+
+  if (esMsi){
+    const t = tarPor(metodo);
+    const c = {id:nuevoId(), tarjetaId:t.id, concepto:g.nota || catDe(g.categoria, 'gasto').nombre, categoria:g.categoria,
+      total:monto, meses:nMsi, fecha, generados:[], creado:Date.now()};
+    try { await escribir([{s:S.msi, put:c}]); await cargar(); await generarAutomaticos(); }
+    catch(err){ toast('No se pudo guardar. Intenta de nuevo.', true); return; }
+    cerrarHoja(); await recargar();
+    const i = infoMsi(estado.msis.find(x => x.id === c.id) || c);
+    toast('Compra a ' + nMsi + ' meses registrada. ' + (i && i.pagados ? 'Ya se registró ' + (i.pagados === 1 ? 'el primer pago.' : i.pagados + ' pagos.') : 'Primer pago: ' + fechaCorta(i.prox) + '.'));
+    return;
+  }
+  const ops = [{s:S.mov, put:g}];
+  if (repetir){
+    const r = {id:nuevoId(), tipo, concepto:g.nota || catDe(g.categoria, tipo).nombre, monto, categoria:g.categoria,
+      metodo: tipo === 'gasto' ? metodo : null, usarCorte: tipo === 'gasto' && !!tarPor(metodo) && $('movUsarCorte').checked,
+      dia:Number(fecha.slice(8)), inicio:per, duracion, generados:[per], creado:Date.now()};
+    g.recurrenteId = r.id; ops.push({s:S.rec, put:r});
+  }
+  try { await escribir(ops); }
   catch(err){ toast('No se pudo guardar. Intenta de nuevo.', true); return; }
   const f = aFecha(fecha); estado.y = f.getFullYear(); estado.m = f.getMonth();
   cerrarHoja(); await recargar();
   const nuevos = excedidos(per).filter(x => !antes.has(x.clave));
   if (nuevos.length === 1) toast(textoExceso(nuevos[0]), true);
   else if (nuevos.length > 1) toast('Superaste ' + nuevos.length + ' presupuestos: ' + nuevos.map(x => x.nombre).join(' y ') + '.', true);
-  else toast(previo ? 'Cambios guardados' : (tipo === 'gasto' ? 'Gasto guardado' : 'Ingreso guardado'));
+  else toast(previo ? 'Cambios guardados' : (tipo === 'gasto' ? 'Gasto guardado' : 'Ingreso guardado') + (repetir ? ' y programado cada mes' : ''));
 });
 $('eliminarMov').addEventListener('click', async () => {
   const g = estado.editMov; if (!g) return;
@@ -942,11 +1157,41 @@ $('formTar').addEventListener('submit', async e => {
 });
 $('eliminarTar').addEventListener('click', async () => {
   const t = estado.editTar; if (!t) return;
-  if (!confirm('¿Eliminar la tarjeta ' + t.nombre + '? Los gastos que ya registraste se conservan; sus recurrentes pasarán a efectivo o débito.')) return;
+  if (!confirm('¿Eliminar la tarjeta ' + t.nombre + '? Los gastos que ya registraste se conservan; sus recurrentes pasarán a efectivo o débito y sus compras a meses se eliminarán.')) return;
   const ops = [{s:S.tar, del:t.id}];
+  estado.msis.filter(c => c.tarjetaId === t.id).forEach(c => ops.push({s:S.msi, del:c.id}));
+  if (estado.pres.modo[t.id]){ delete estado.pres.modo[t.id]; if (!estado.pres.porMetodo[t.id]) ops.push({s:S.aj, put:{clave:'presupuestos', valor:estado.pres}}); }
   estado.recs.filter(r => r.metodo === t.id).forEach(r => { r.metodo = 'efectivo'; r.usarCorte = false; if (!r.dia) r.dia = t.diaCorte; ops.push({s:S.rec, put:r}); });
   if (estado.pres.porMetodo[t.id]){ delete estado.pres.porMetodo[t.id]; ops.push({s:S.aj, put:{clave:'presupuestos', valor:estado.pres}}); }
   await escribir(ops); cerrarHoja(); await recargar(); toast('Tarjeta eliminada');
+});
+
+/* ================= Compra a meses ================= */
+let msiActual = null;
+function abrirMsi(c){
+  msiActual = c; const i = infoMsi(c); if (!i) return;
+  $('tituloMsi').textContent = c.concepto;
+  const r = $('msiResumen'); r.innerHTML = '';
+  const p1 = el('p'); p1.style.margin = '0 0 6px';
+  p1.append('Compra de ', el('strong', 'num', dinero(c.total)), ' con ' + i.t.nombre + ' el ' + fechaCorta(c.fecha) + ', a ' + c.meses + ' meses sin intereses.');
+  const p2 = el('p'); p2.style.margin = '0';
+  if (i.restante > 0) p2.append('Llevas ', el('strong', null, i.pagados + ' de ' + c.meses + ' pagos'), '. Te faltan ', el('strong', 'num', dinero(i.restante)), '.');
+  else p2.append(el('strong', null, 'Liquidada.'), ' Se hicieron los ' + c.meses + ' pagos.');
+  r.append(p1, p2);
+  const lista = $('msiPagos'); lista.innerHTML = '';
+  i.cortes.forEach((f, idx) => {
+    const k = idx + 1, hecho = k <= i.pagados;
+    const fila = el('div', 'fila-pago' + (hecho ? ' hecho' : ''));
+    fila.append(el('span', null, 'Pago ' + k + ' de ' + c.meses), el('span', 'num', dinero(cuota(c, k))),
+      el('span', 'estado', (hecho ? 'Pagado en el corte del ' : 'Corte del ') + aFecha(f).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'})));
+    lista.appendChild(fila);
+  });
+  abrirHoja($('hojaMsi'));
+}
+$('eliminarMsi').addEventListener('click', async () => {
+  const c = msiActual; if (!c) return;
+  if (!confirm('¿Eliminar la compra “' + c.concepto + '”? Dejará de generar pagos y el disponible de la tarjeta se recalculará. Los pagos que ya aparecen en tus movimientos se conservan.')) return;
+  await escribir([{s:S.msi, del:c.id}]); cerrarHoja(); await recargar(); toast('Compra eliminada');
 });
 
 /* ================= Recurrente ================= */
@@ -1028,7 +1273,7 @@ $('formRec').addEventListener('submit', async e => {
   };
   await escribir([{s:S.rec, put:r}]);
   await cargar();
-  const n = await generarRecurrentes();
+  const n = await generarAutomaticos();
   cerrarHoja(); await recargar();
   const guardado = estado.recs.find(x => x.id === r.id);
   const prox = guardado && proximoCargo(guardado);
@@ -1043,7 +1288,8 @@ $('eliminarRec').addEventListener('click', async () => {
 
 /* ================= Presupuesto ================= */
 $('guardarPres').addEventListener('click', async () => {
-  const nuevo = {general:null, porMetodo:{}};
+  const nuevo = {general:null, porMetodo:{}, modo:{}};
+  document.querySelectorAll('#listaPres input[name^="modo_"]:checked').forEach(r => { if (r.value === 'corte') nuevo.modo[r.name.slice(5)] = 'corte'; });
   let invalido = null;
   document.querySelectorAll('#listaPres input[data-clave]').forEach(i => {
     const txt = i.value.trim(); if (!txt) return;
@@ -1081,8 +1327,8 @@ async function compartirODescargar(contenido, nombre, mime){
   return true;
 }
 async function exportarJSON(){
-  const datos = {app:'misgastos', version:2, exportado:new Date().toISOString(),
-    movimientos:estado.movs, tarjetas:estado.tarjetas, recurrentes:estado.recs, presupuestos:estado.pres};
+  const datos = {app:'misgastos', version:3, exportado:new Date().toISOString(),
+    movimientos:estado.movs, tarjetas:estado.tarjetas, recurrentes:estado.recs, msi:estado.msis, presupuestos:estado.pres};
   const ok = await compartirODescargar(JSON.stringify(datos), 'respaldo-gastos-' + hoyISO() + '.json', 'application/json');
   if (ok){ lsSet(KEY_RESPALDO, String(Date.now())); estado.ocultarRespaldo = true; renderMenu(); render(); toast('Respaldo guardado'); }
 }
@@ -1109,7 +1355,15 @@ function validarMov(x){
     creado: Number(x.creado) || Date.now(), modificado: Number(x.modificado) || Date.now()};
   if (tipo === 'gasto') g.metodo = typeof x.metodo === 'string' && x.metodo ? x.metodo : 'efectivo';
   if (typeof x.recurrenteId === 'string') g.recurrenteId = x.recurrenteId;
+  if (typeof x.msiId === 'string') g.msiId = x.msiId;
   return g;
+}
+function validarMsi(x){
+  if (!x || typeof x.id !== 'string' || typeof x.tarjetaId !== 'string' || !esCent(x.total)) return null;
+  if (!Number.isInteger(x.meses) || x.meses < 1 || typeof x.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x.fecha)) return null;
+  return {id:x.id, tarjetaId:x.tarjetaId, concepto:String(x.concepto || 'Compra').slice(0, 80),
+    categoria: catPor[x.categoria] ? x.categoria : 'otros', total:x.total, meses:x.meses, fecha:x.fecha,
+    generados: Array.isArray(x.generados) ? x.generados.filter(Number.isInteger) : [], creado:Number(x.creado) || Date.now()};
 }
 function validarTar(x){
   if (!x || typeof x.id !== 'string' || typeof x.nombre !== 'string' || !Number.isInteger(x.disponibleBase)) return null;
@@ -1139,17 +1393,20 @@ $('archivo').addEventListener('change', async e => {
     const movs = movsRaw.map(validarMov).filter(Boolean);
     const tars = (datos.tarjetas || []).map(validarTar).filter(Boolean);
     const recs = (datos.recurrentes || []).map(validarRec).filter(Boolean);
+    const msis = (datos.msi || []).map(validarMsi).filter(Boolean);
     const pres = datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : null;
     if (!movs.length && !tars.length && !recs.length){ toast('El archivo no tiene datos válidos', true); return; }
     const partes = [movs.length + ' movimientos'];
     if (tars.length) partes.push(tars.length + ' tarjetas');
     if (recs.length) partes.push(recs.length + ' recurrentes');
+    if (msis.length) partes.push(msis.length + ' compras a meses');
     if (!confirm('El respaldo tiene ' + partes.join(', ') + '. Lo que ya tengas con el mismo registro se reemplazará con la versión del respaldo. ¿Continuar?')) return;
-    const ops = movs.map(x => ({s:S.mov, put:x})).concat(tars.map(x => ({s:S.tar, put:x})), recs.map(x => ({s:S.rec, put:x})));
+    const ops = movs.map(x => ({s:S.mov, put:x})).concat(tars.map(x => ({s:S.tar, put:x})), recs.map(x => ({s:S.rec, put:x})), msis.map(x => ({s:S.msi, put:x})));
     if (pres) ops.push({s:S.aj, put:{clave:'presupuestos', valor:{general: esCent(pres.general) ? pres.general : null,
-      porMetodo: pres.porMetodo && typeof pres.porMetodo === 'object' ? pres.porMetodo : {}}}});
+      porMetodo: pres.porMetodo && typeof pres.porMetodo === 'object' ? pres.porMetodo : {},
+      modo: pres.modo && typeof pres.modo === 'object' ? pres.modo : {}}}});
     await escribir(ops);
-    await cargar(); await generarRecurrentes(); await recargar(); cerrarHoja();
+    await cargar(); await generarAutomaticos(); await recargar(); cerrarHoja();
     toast('Respaldo restaurado');
   } catch(err){ toast('Ese archivo no es un respaldo de Mis Gastos', true); }
 });
@@ -1185,10 +1442,10 @@ async function pedirPersistencia(){
 /* ================= Inicio ================= */
 async function revisarRecurrentes(){
   await cargar();
-  const n = await generarRecurrentes();
+  const n = await generarAutomaticos();
   if (n) await cargar();
   render();
-  if (n) toast(n === 1 ? 'Se registró 1 movimiento recurrente' : 'Se registraron ' + n + ' movimientos recurrentes');
+  if (n) toast(n === 1 ? 'Se registró 1 pago programado' : 'Se registraron ' + n + ' pagos programados');
 }
 async function iniciar(){
   try {
