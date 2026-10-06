@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#16302B">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -35,7 +35,8 @@
   --line:#2A3A35; --danger:#E0756D; --pos:#6CCB94;
 }
 *,*::before,*::after{box-sizing:inherit}
-html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%;touch-action:pan-x pan-y}
+button,label,a{touch-action:manipulation}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
   font-size:17px;line-height:1.4;-webkit-tap-highlight-color:transparent;min-height:100%}
 button,input,select{font:inherit;color:inherit}
@@ -44,6 +45,8 @@ button{cursor:pointer}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .num{font-variant-numeric:tabular-nums}
 .pos{color:var(--pos)}
+.apagado{color:var(--muted);font-weight:500 !important}
+.tarjeta .limite{font-size:13px;opacity:.8;margin-left:6px}
 .neg{color:var(--danger)}
 
 .app{max-width:560px;margin:0 auto;padding:12px 16px calc(var(--nav-h) + 110px)}
@@ -340,9 +343,10 @@ button{cursor:pointer}
   <form id="formTar" novalidate>
     <h2 id="tituloTar">Nueva tarjeta</h2>
     <label class="campo"><span>Nombre</span><input id="tarNombre" maxlength="30" placeholder="Ej. BBVA Azul" autocomplete="off"></label>
-    <label class="campo"><span>Crédito disponible hoy</span><input id="tarDisp" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+    <label class="campo"><span>Límite de crédito</span><input id="tarLimite" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
     <label class="campo"><span>Día de corte</span><input id="tarCorte" class="solo-num" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="Del 1 al 31" autocomplete="off"></label>
-    <p class="ayuda" id="ayudaTar">Cada gasto con esta tarjeta se descuenta del disponible. Cuando la pagues, actualiza aquí el crédito disponible.</p>
+    <label class="campo"><span>Saldo que ya debes y no vas a registrar (opcional)</span><input id="tarSaldo" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+    <p class="ayuda">Cada cargo se descuenta del límite y se libera en el primer corte después de su fecha. Las compras a meses descuentan lo que te falta pagar.</p>
     <p class="error" id="errorTar" hidden></p>
     <div class="form-acciones">
       <button type="button" class="btn btn-peligro" id="eliminarTar" hidden>Eliminar</button>
@@ -542,7 +546,8 @@ async function cargar(){
   const [movs, tar, rec, aj, msi] = await Promise.all([leer(S.mov), leer(S.tar), leer(S.rec), leer(S.aj), leer(S.msi)]);
   estado.msis = msi.sort((a, b) => (a.creado || 0) - (b.creado || 0));
   estado.movs = movs.map(normMov);
-  estado.tarjetas = tar.sort((a, b) => (a.creado || 0) - (b.creado || 0));
+  estado.tarjetas = tar.map(t => { if (t.limite == null) t.limite = t.disponibleBase || 0; return t; })
+    .sort((a, b) => (a.creado || 0) - (b.creado || 0));
   estado.recs = rec.sort((a, b) => (a.creado || 0) - (b.creado || 0));
   const p = aj.find(a => a.clave === 'presupuestos');
   estado.pres = p && p.valor ? p.valor : {general:null, porMetodo:{}};
@@ -558,20 +563,39 @@ function metodoNombre(id){
   const t = tarPor(id); return t ? t.nombre : 'Tarjeta eliminada';
 }
 function metodoColor(id){ const t = tarPor(id); return t ? t.color : '#7D8A86'; }
-// Disponible = lo que capturaste como disponible menos los gastos registrados después de esa captura
-function disponible(t, excluirId){
-  const fechaBase = isoDe(new Date(t.baseDesde)), hoyS = hoyISO();
-  let d = t.disponibleBase - sumar(estado.movs.filter(g =>
-    g.tipo === 'gasto' && g.metodo === t.id && (g.creado || 0) > t.baseDesde && g.id !== excluirId &&
-    !g.msiId && !(g.recurrenteId && g.fecha < fechaBase)));
-  // Meses sin intereses: se descuenta el total al comprar y se libera una mensualidad en cada corte
-  estado.msis.filter(c => c.tarjetaId === t.id).forEach(c => {
-    const cortes = cortesMsi(c, t);
-    const posterior = (c.creado || 0) > t.baseDesde && c.fecha >= fechaBase;
-    if (posterior) d -= c.total;
-    cortes.forEach((f, i) => { if (f <= hoyS && (posterior || f > fechaBase)) d += cuota(c, i + 1); });
+// Corte en el que se paga un cargo: el primer corte en o después de su fecha
+function corteDe(fecha, dia){
+  const per = fecha.slice(0, 7);
+  let c = isoConDia(per, dia);
+  if (c < fecha) c = isoConDia(perSum(per, 1), dia);
+  return c;
+}
+// Cargos normales que todavía no pasan por un corte (se pagan en el próximo)
+function porPagar(t, excluirId){
+  const hoyS = hoyISO(); let x = 0;
+  estado.movs.forEach(g => {
+    if (g.tipo === 'gasto' && g.metodo === t.id && !g.msiId && g.id !== excluirId &&
+        g.fecha <= hoyS && corteDe(g.fecha, t.diaCorte) > hoyS) x += g.monto;
   });
-  return d;
+  if (t.saldoInicial && t.saldoInicialFecha && corteDe(t.saldoInicialFecha, t.diaCorte) > hoyS) x += t.saldoInicial;
+  return x;
+}
+// Lo que falta por pagar de las compras a meses
+function deudaMsi(t){
+  const hoyS = hoyISO(); let x = 0;
+  estado.msis.forEach(c => { if (c.tarjetaId === t.id && c.fecha <= hoyS){ const i = infoMsi(c); if (i) x += i.restante; } });
+  return x;
+}
+// Disponible = límite − cargos pendientes de corte − saldo pendiente de meses sin intereses
+function disponible(t, excluirId){ return (t.limite || 0) - porPagar(t, excluirId) - deudaMsi(t); }
+// Lo que toca pagar en el próximo corte: cargos pendientes + mensualidades de ese corte
+function aPagarCorte(t){
+  const prox = infoCorte(t).prox, hoyS = hoyISO(); let x = porPagar(t);
+  estado.msis.forEach(c => {
+    if (c.tarjetaId !== t.id || c.fecha > hoyS) return;
+    const k = cortesMsi(c, t).indexOf(prox); if (k >= 0) x += cuota(c, k + 1);
+  });
+  return x;
 }
 /* ---- Meses sin intereses ---- */
 function cortesMsi(c, t){
@@ -593,11 +617,10 @@ function infoMsi(c){
 function infoCorte(t){
   const hoyS = hoyISO(), perHoy = hoyS.slice(0, 7);
   let prox = isoConDia(perHoy, t.diaCorte);
-  if (prox < hoyS) prox = isoConDia(perSum(perHoy, 1), t.diaCorte);
+  if (prox <= hoyS) prox = isoConDia(perSum(perHoy, 1), t.diaCorte);
   const ant = isoConDia(perSum(prox.slice(0, 7), -1), t.diaCorte);
   const dias = Math.round((aFecha(prox) - aFecha(hoyS)) / 86400000);
-  const gastado = sumar(estado.movs.filter(g => g.tipo === 'gasto' && g.metodo === t.id && g.fecha > ant && g.fecha <= prox));
-  return {prox, ant, dias, gastado};
+  return {prox, ant, dias};
 }
 function metodosItems(excluirId){
   return [{id:'efectivo', nombre:'Efectivo o débito', color:'#7D8A86'}]
@@ -749,7 +772,8 @@ function renderMov(){
 
   // Lista por día
   const lista = $('lista'); lista.innerHTML = '';
-  if (delMes.length === 0){
+  const comprasMes = estado.msis.filter(c => c.fecha.startsWith(pref) && tarPor(c.tarjetaId));
+  if (delMes.length === 0 && comprasMes.length === 0){
     const esActual = pref === hoyISO().slice(0, 7);
     const v = el('div', 'vacio');
     v.append(el('strong', null, esActual ? 'Aún no hay movimientos este mes' : 'No hay movimientos en este mes'),
@@ -758,16 +782,24 @@ function renderMov(){
   } else {
     const hoyStr = hoyISO(); const ay = new Date(); ay.setDate(ay.getDate() - 1); const ayerStr = isoDe(ay);
     const grupos = new Map();
-    delMes.forEach(g => { if (!grupos.has(g.fecha)) grupos.set(g.fecha, []); grupos.get(g.fecha).push(g); });
+    delMes.concat(comprasMes.map(c => ({esMsi:true, fecha:c.fecha, creado:c.creado, c})))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.creado || 0) - (a.creado || 0))
+      .forEach(g => { if (!grupos.has(g.fecha)) grupos.set(g.fecha, []); grupos.get(g.fecha).push(g); });
     grupos.forEach((items, fecha) => {
       const dia = el('div', 'dia');
       const etiqueta = fecha === hoyStr ? 'Hoy' : fecha === ayerStr ? 'Ayer'
         : aFecha(fecha).toLocaleDateString('es-MX', {weekday:'long', day:'numeric', month:'long'});
       const neto = sumar(items.filter(g => g.tipo === 'ingreso')) - sumar(items.filter(g => g.tipo === 'gasto'));
       const head = el('div', 'dia-head');
-      head.append(el('span', null, etiqueta), el('span', 'num', (neto > 0 ? '+' : neto < 0 ? '−' : '') + dinero(Math.abs(neto))));
+      head.append(el('span', null, etiqueta), el('span', 'num', items.every(x => x.esMsi) ? '' : (neto > 0 ? '+' : neto < 0 ? '−' : '') + dinero(Math.abs(neto))));
       const cont = el('div', 'grupo');
       items.forEach(g => {
+        if (g.esMsi){
+          const m = g.c, t = tarPor(m.tarjetaId);
+          cont.appendChild(itemBoton(t.color, m.concepto, 'Compra a ' + m.meses + ' meses sin intereses con ' + t.nombre,
+            'No suma al total: cada corte se registra ' + dinero(cuota(m, 1)), dinero(m.total), 'apagado', () => abrirMsi(m)));
+          return;
+        }
         const c = catDe(g.categoria, g.tipo);
         const partes = [];
         if (g.nota) partes.push(c.nombre);
@@ -800,7 +832,7 @@ function renderTar(){
   if (!estado.tarjetas.length){
     const v = el('div', 'vacio');
     v.append(el('strong', null, 'Aún no tienes tarjetas'),
-      el('span', null, 'Agrega tus tarjetas de crédito con su disponible y su día de corte. Cada gasto que pagues con ellas se descuenta solo.'));
+      el('span', null, 'Agrega tus tarjetas de crédito con su límite y su día de corte. Cada gasto que pagues con ellas se descuenta solo.'));
     cont.appendChild(v); $('totalTar').textContent = ''; return;
   }
   let total = 0;
@@ -809,10 +841,11 @@ function renderTar(){
     const b = el('button', 'tarjeta'); b.type = 'button'; b.style.background = t.color;
     const arriba = el('div'); arriba.appendChild(el('span', 'nombre', t.nombre));
     const medio = el('div'); medio.style.position = 'relative';
-    medio.append(el('span', 'disp-lbl', 'Disponible'), el('span', 'disp num', (d < 0 ? '−' : '') + dinero(Math.abs(d))));
+    const lbl = el('span', 'disp-lbl', 'Disponible'); lbl.appendChild(el('span', 'limite num', 'de ' + dinero(t.limite || 0)));
+    medio.append(lbl, el('span', 'disp num', (d < 0 ? '−' : '') + dinero(Math.abs(d))));
     const pie = el('div', 'pie');
-    pie.append(el('span', null, ic.dias === 0 ? 'Hoy es su corte' : 'Corte el ' + fechaCorta(ic.prox) + ' (' + (ic.dias === 1 ? 'mañana' : 'en ' + ic.dias + ' días') + ')'),
-      el('span', 'num', 'Este corte: ' + dinero(ic.gastado)));
+    pie.append(el('span', null, 'Corte el ' + fechaCorta(ic.prox) + ' (' + (ic.dias === 1 ? 'mañana' : 'en ' + ic.dias + ' días') + ')'),
+      el('span', 'num', 'A pagar en ese corte: ' + dinero(aPagarCorte(t))));
     b.append(arriba, medio, pie);
     b.setAttribute('aria-label', t.nombre + ', disponible ' + dinero(d) + '. Editar');
     b.addEventListener('click', () => abrirTar(t));
@@ -1133,7 +1166,9 @@ function abrirTar(t){
   $('guardarTar').textContent = t ? 'Guardar cambios' : 'Guardar tarjeta';
   $('eliminarTar').hidden = !t;
   $('tarNombre').value = t ? t.nombre : '';
-  $('tarDisp').value = t ? (disponible(t) / 100).toFixed(2) : '';
+  $('tarLimite').value = t ? ((t.limite || 0) / 100).toFixed(2) : '';
+  const saldoVigente = t && t.saldoInicial && t.saldoInicialFecha && corteDe(t.saldoInicialFecha, t.diaCorte) > hoyISO();
+  $('tarSaldo').value = saldoVigente ? (t.saldoInicial / 100).toFixed(2) : '';
   $('tarCorte').value = t ? String(t.diaCorte) : '';
   $('errorTar').hidden = true;
   abrirHoja($('hojaTar'));
@@ -1142,16 +1177,21 @@ function abrirTar(t){
 $('formTar').addEventListener('submit', async e => {
   e.preventDefault(); $('errorTar').hidden = true;
   const nombre = $('tarNombre').value.trim();
-  const disp = aCentavos($('tarDisp').value, true);
+  const limite = aCentavos($('tarLimite').value);
+  const saldoTxt = $('tarSaldo').value.trim();
+  const saldo = saldoTxt ? aCentavos(saldoTxt, true) : 0;
   const corte = parseInt($('tarCorte').value, 10);
   if (!nombre) return mostrarError('errorTar', 'Escribe un nombre para la tarjeta.');
-  if (disp === null) return mostrarError('errorTar', 'Escribe el crédito disponible (puede ser 0).');
+  if (!limite) return mostrarError('errorTar', 'Escribe el límite de crédito de la tarjeta.');
+  if (saldo === null) return mostrarError('errorTar', 'Revisa el saldo que ya debes: solo números.');
   if (!(corte >= 1 && corte <= 31)) return mostrarError('errorTar', 'El día de corte debe estar entre 1 y 31.');
   const previo = estado.editTar;
   const t = previo ? Object.assign({}, previo) : {id:nuevoId(), creado:Date.now(),
     color:COLORES_TARJ[estado.tarjetas.length % COLORES_TARJ.length]};
   t.nombre = nombre; t.diaCorte = corte;
-  if (!previo || disp !== disponible(previo)){ t.disponibleBase = disp; t.baseDesde = Date.now(); }
+  t.limite = limite; delete t.disponibleBase; delete t.baseDesde;
+  const saldoAnt = previo && previo.saldoInicial && previo.saldoInicialFecha && corteDe(previo.saldoInicialFecha, previo.diaCorte) > hoyISO() ? previo.saldoInicial : 0;
+  if (saldo !== saldoAnt){ t.saldoInicial = saldo; t.saldoInicialFecha = hoyISO(); }
   await escribir([{s:S.tar, put:t}]);
   cerrarHoja(); await recargar(); toast(previo ? 'Tarjeta actualizada' : 'Tarjeta agregada');
 });
@@ -1366,10 +1406,14 @@ function validarMsi(x){
     generados: Array.isArray(x.generados) ? x.generados.filter(Number.isInteger) : [], creado:Number(x.creado) || Date.now()};
 }
 function validarTar(x){
-  if (!x || typeof x.id !== 'string' || typeof x.nombre !== 'string' || !Number.isInteger(x.disponibleBase)) return null;
+  if (!x || typeof x.id !== 'string' || typeof x.nombre !== 'string') return null;
+  const limite = Number.isInteger(x.limite) ? x.limite : Number.isInteger(x.disponibleBase) ? x.disponibleBase : null;
+  if (limite === null) return null;
   const c = Number(x.diaCorte); if (!(c >= 1 && c <= 31)) return null;
-  return {id:x.id, nombre:x.nombre.slice(0, 30), disponibleBase:x.disponibleBase, baseDesde:Number(x.baseDesde) || 0,
-    diaCorte:c, color: typeof x.color === 'string' ? x.color : COLORES_TARJ[0], creado:Number(x.creado) || Date.now()};
+  const t = {id:x.id, nombre:x.nombre.slice(0, 30), limite, diaCorte:c,
+    color: typeof x.color === 'string' ? x.color : COLORES_TARJ[0], creado:Number(x.creado) || Date.now()};
+  if (Number.isInteger(x.saldoInicial) && typeof x.saldoInicialFecha === 'string'){ t.saldoInicial = x.saldoInicial; t.saldoInicialFecha = x.saldoInicialFecha; }
+  return t;
 }
 function validarRec(x){
   if (!x || typeof x.id !== 'string' || typeof x.concepto !== 'string' || !esCent(x.monto) || !esPer(x.inicio)) return null;
@@ -1462,6 +1506,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && db && !hojaActual) revisarRecurrentes();
 });
 iniciar();
+
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {passive:false}));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, {passive:false});
 
 if ('serviceWorker' in navigator){
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

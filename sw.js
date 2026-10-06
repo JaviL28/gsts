@@ -1,5 +1,5 @@
 // Mis Gastos — service worker. Cambia VERSION cada vez que publiques cambios.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'misgastos-' + VERSION;
 const ARCHIVOS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
